@@ -6,6 +6,8 @@
 #include "bmp280.h"
 
 volatile uint8_t can_int_flag = 0;
+volatile uint8_t can_bus_off = 0;
+volatile uint8_t can_intf_stuck = 0;
 
 // globally declared vaiable with physically allocated memory in RAM
 I2C_HandleTypeDef hi2c;
@@ -136,6 +138,8 @@ int main(void)
         }
     }
 
+    uint32_t last_broadcast_tick = SysTick_GetTick();
+
     // // poll the RX0IF in READ_STATUS
     // // RX0IF - receive buffer 0 Full Interrupt Flag bit
     // // when RX0IF is 1 - interrupt is pending (must be cleared by MCU to reset the interrupt condition)
@@ -168,6 +172,9 @@ int main(void)
     */
 
     uint8_t can_intf_val;
+    uint8_t can_erlg_val;
+
+    uint32_t grace_window_ms;
 
     // a data frame:
     // SIDH, SIDL, EID8 (zeroed out, don't care), EID0 (zeroed out, don't care), DLC, up to 8 data bytes
@@ -193,26 +200,61 @@ int main(void)
                 {
                     mcp2515_canintf_handler(can_intf_val, can_int_rx0_header, can_int_rx0_payload, &can_int_rx0_flag, can_int_rx1_header, can_int_rx1_payload, &can_int_rx1_flag);
                 }
-            } while (can_intf_val != 0);
+            } while (can_intf_val & ~(1 << 5));
 
             can_int_flag = 0;
         }
 
-        // if rx0_flag is set, the rx0_buffer has a new frame
-        if (can_int_rx0_flag)
+        if (SysTick_GetTick() - last_broadcast_tick >= 500U)
         {
-            // for now, inspect the frame in the CGB
-            // UART incorporation is the Integration Project scope
+            last_broadcast_tick = SysTick_GetTick();
 
-            can_int_rx0_flag = 0;
-        }
-        // if rx1_flag is set, the rx1_buffer has a new frame
-        if (can_int_rx1_flag)
-        {
-            // for now, inspect the frame in the CGB
-            // UART incorporation is the Integration Project scope
+            if (can_intf_stuck)
+            {
+                printf("The MCP2515 experiences unhandled error condition!");
+                fflush(stdout);
+            }
 
-            can_int_rx1_flag = 0;
+            if (can_bus_off)
+            {
+                mcp2515_read(EFLG, &can_erlg_val, 1U);
+
+                if (!(can_erlg_val & MCP_EFLG_TXBO))
+                {
+
+                    grace_window_ms = SysTick_GetTick();
+
+                    while (SysTick_GetTick() - grace_window_ms < 10U)
+                        ;
+
+                    can_bus_off = 0;
+                }
+            }
+
+            if (!can_bus_off && !can_intf_stuck)
+            {
+                // SIDH, SIDL, EID8 (zeroed out, don't care), EID0 (zeroed out, don't care), DLC, up to 8 data bytes
+
+                // normal path: read BMP280 values, build frames, load TX buffers, RTS, done
+                uint8_t test_bytes[4] = {0xAA, 0x45, 0xB1, 0x22};
+                uint16_t ID = 0x100; // 11 bits; 11-0, 15-12 are unused
+                uint8_t SIDH = ID >> 3;
+                uint8_t SIDL = (ID & 0x7) << 5;
+
+                // DLC: bit 6 RTR - 0, bits 3-0 DLC
+                // 4 bytes = 0100
+                // TXB0DLC - 0 0 00 0100 => 0000 0100 = 0x4 = 2^2
+                uint8_t DLC = 0x4;
+
+                // SIDH, SIDL, EID8 (zeroed out, don't care), EID0 (zeroed out, don't care), DLC, 4 data bytes
+
+                uint8_t data_payload[9] = {SIDH, SIDL, 0x00, 0x00, DLC, test_bytes[0], test_bytes[1], test_bytes[2], test_bytes[3]};
+
+                mcp2515_load_tx_buffer(MCP_Load_TXB0D0, data_payload, 9);
+
+                MCP_RTS_locations_t location = MCP_RTS_TXB0;
+                mcp2515_rts(&location, 1U);
+            }
         }
     }
 
