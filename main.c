@@ -175,6 +175,7 @@ int main(void)
     uint8_t can_erlg_val;
 
     uint32_t grace_window_ms;
+    uint8_t grace_active = 0;
 
     // a data frame:
     // SIDH, SIDL, EID8 (zeroed out, don't care), EID0 (zeroed out, don't care), DLC, up to 8 data bytes
@@ -217,17 +218,25 @@ int main(void)
 
             if (can_bus_off)
             {
-                mcp2515_read(EFLG, &can_erlg_val, 1U);
-
-                if (!(can_erlg_val & MCP_EFLG_TXBO))
+                if (!grace_active)
                 {
+                    mcp2515_read(EFLG, &can_erlg_val, 1U);
 
-                    grace_window_ms = SysTick_GetTick();
+                    if (!(can_erlg_val & MCP_EFLG_TXBO))
+                    {
 
-                    while (SysTick_GetTick() - grace_window_ms < 10U)
-                        ;
+                        grace_window_ms = SysTick_GetTick();
 
-                    can_bus_off = 0;
+                        grace_active = 1;
+                    }
+                }
+                else
+                {
+                    if (SysTick_GetTick() - grace_window_ms >= 10U)
+                    {
+                        can_bus_off = 0;
+                        grace_active = 0;
+                    }
                 }
             }
 
