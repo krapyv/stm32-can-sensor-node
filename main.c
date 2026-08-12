@@ -4,6 +4,7 @@
 #include "systick.h"
 #include "led.h"
 #include "bmp280.h"
+#include "uart.h"
 
 volatile uint8_t can_int_flag = 0;
 volatile uint8_t can_bus_off = 0;
@@ -191,8 +192,25 @@ int main(void)
     while (1)
     {
 
-        if (can_int_flag)
+        // if (can_int_flag)
+        // {
+        //     do
+        //     {
+        //         mcp2515_read(CANINTF, &can_intf_val, 1U);
+
+        //         if (can_intf_val)
+        //         {
+        //             mcp2515_canintf_handler(can_intf_val, can_int_rx0_header, can_int_rx0_payload, &can_int_rx0_flag, can_int_rx1_header, can_int_rx1_payload, &can_int_rx1_flag);
+        //         }
+        //     } while (can_intf_val & ~((1 << 7) | (1 << 5)));
+
+        //     can_int_flag = 0;
+        // }
+
+        if (SysTick_GetTick() - last_broadcast_tick >= 500U)
         {
+            last_broadcast_tick = SysTick_GetTick();
+
             do
             {
                 mcp2515_read(CANINTF, &can_intf_val, 1U);
@@ -201,14 +219,7 @@ int main(void)
                 {
                     mcp2515_canintf_handler(can_intf_val, can_int_rx0_header, can_int_rx0_payload, &can_int_rx0_flag, can_int_rx1_header, can_int_rx1_payload, &can_int_rx1_flag);
                 }
-            } while (can_intf_val & ~(1 << 5));
-
-            can_int_flag = 0;
-        }
-
-        if (SysTick_GetTick() - last_broadcast_tick >= 500U)
-        {
-            last_broadcast_tick = SysTick_GetTick();
+            } while (can_intf_val & ~((1 << 7) | (1 << 5)));
 
             if (can_intf_stuck)
             {
@@ -218,6 +229,9 @@ int main(void)
 
             if (can_bus_off)
             {
+                printf("The bus is off!");
+                fflush(stdout);
+
                 if (!grace_active)
                 {
                     mcp2515_read(EFLG, &can_erlg_val, 1U);
@@ -232,6 +246,9 @@ int main(void)
                 }
                 else
                 {
+                    printf("The grace window is ongoing!");
+                    fflush(stdout);
+
                     if (SysTick_GetTick() - grace_window_ms >= 10U)
                     {
                         can_bus_off = 0;
@@ -240,30 +257,27 @@ int main(void)
                 }
             }
 
-            if (!can_bus_off && !can_intf_stuck)
-            {
-                // SIDH, SIDL, EID8 (zeroed out, don't care), EID0 (zeroed out, don't care), DLC, up to 8 data bytes
+            // SIDH, SIDL, EID8 (zeroed out, don't care), EID0 (zeroed out, don't care), DLC, up to 8 data bytes
 
-                // normal path: read BMP280 values, build frames, load TX buffers, RTS, done
-                uint8_t test_bytes[4] = {0xAA, 0x45, 0xB1, 0x22};
-                uint16_t ID = 0x100; // 11 bits; 11-0, 15-12 are unused
-                uint8_t SIDH = ID >> 3;
-                uint8_t SIDL = (ID & 0x7) << 5;
+            // normal path: read BMP280 values, build frames, load TX buffers, RTS, done
+            uint8_t test_bytes[4] = {0xAA, 0x45, 0xB1, 0x22};
+            uint16_t ID = 0x100; // 11 bits; 11-0, 15-12 are unused
+            uint8_t SIDH = ID >> 3;
+            uint8_t SIDL = (ID & 0x7) << 5;
 
-                // DLC: bit 6 RTR - 0, bits 3-0 DLC
-                // 4 bytes = 0100
-                // TXB0DLC - 0 0 00 0100 => 0000 0100 = 0x4 = 2^2
-                uint8_t DLC = 0x4;
+            // DLC: bit 6 RTR - 0, bits 3-0 DLC
+            // 4 bytes = 0100
+            // TXB0DLC - 0 0 00 0100 => 0000 0100 = 0x4 = 2^2
+            uint8_t DLC = 0x4;
 
-                // SIDH, SIDL, EID8 (zeroed out, don't care), EID0 (zeroed out, don't care), DLC, 4 data bytes
+            // SIDH, SIDL, EID8 (zeroed out, don't care), EID0 (zeroed out, don't care), DLC, 4 data bytes
 
-                uint8_t data_payload[9] = {SIDH, SIDL, 0x00, 0x00, DLC, test_bytes[0], test_bytes[1], test_bytes[2], test_bytes[3]};
+            uint8_t data_payload[9] = {SIDH, SIDL, 0x00, 0x00, DLC, test_bytes[0], test_bytes[1], test_bytes[2], test_bytes[3]};
 
-                mcp2515_load_tx_buffer(MCP_Load_TXB0D0, data_payload, 9);
+            mcp2515_load_tx_buffer(MCP_Load_TXB0SIDH, data_payload, 9);
 
-                MCP_RTS_locations_t location = MCP_RTS_TXB0;
-                mcp2515_rts(&location, 1U);
-            }
+            MCP_RTS_locations_t location = MCP_RTS_TXB0;
+            mcp2515_rts(&location, 1U);
         }
     }
 
