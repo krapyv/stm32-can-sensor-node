@@ -151,37 +151,6 @@ int main(void)
 
     uint32_t last_broadcast_tick = SysTick_GetTick();
 
-    // // poll the RX0IF in READ_STATUS
-    // // RX0IF - receive buffer 0 Full Interrupt Flag bit
-    // // when RX0IF is 1 - interrupt is pending (must be cleared by MCU to reset the interrupt condition)
-    // uint8_t status_val = 0;
-
-    // // TODO
-    // // an unbounded poll - a deliberate, correct, test-harness wait for a human-triggered external event, with a clear exit condition (cansend)
-    // // should be refactored into the timeout-and-defined-behavior version for a real deployment (or the Week 21 integration project)
-    // do
-    // {
-    //     mcp2515_read_status(&status_val, 1U);
-    // } while (!(status_val & (1 << 0)));
-
-    /*
-    // now this EFLG polling loop is unbounded
-    // a real deployment would want this non-blocking (checked periodically rather than blocking main())
-    do
-    {
-        // read the EFLG register (0x2D) awaiting for the RX0VR
-        mcp2515_read(EFLG, &status_val, 1U);
-    } while (!(status_val & (1 << 6)));
-    // after the second frame arrived, causing OVR, the bit 6 RXOVR is set, so the loop exits
-
-    // once RX buffer has the data frame, retrieve it
-    uint8_t rx_frame_bytes[9];
-
-    mcp2515_read_rx_buffer(MCP_Read_RXB0SIDH, rx_frame_bytes, 9U);
-    // the READ RX BUFFER instruction automatically clears the associated receive flag, RXnIF (CANINTF), when CS is raised at the end of the command
-    // so the RX0IF flag will be cleared automatically, so the hardware condition to reset the interrupt condition is satisfied
-    */
-
     uint8_t can_intf_val;
     uint8_t can_erlg_val;
 
@@ -203,6 +172,7 @@ int main(void)
     {
         I2C_Process();
 
+        // NOTE: Legacy code block
         // if (can_int_flag)
         // {
         //     do
@@ -268,141 +238,156 @@ int main(void)
                 }
             }
 
-            switch (hbmp.state)
+            if (!can_bus_off && !can_intf_stuck)
             {
-            case BMP280_STATE_IDLE:
-                break;
-            case BMP280_STATE_INIT:
-                if (BMP280_Init(&hbmp, meas) != BMP280_OK)
+                if (hbmp.state == BMP280_STATE_READY)
                 {
-                    hbmp.state = BMP280_STATE_ERROR;
-                }
-                break;
-            case BMP280_STATE_READ_CALIBRATION:
-                if (BMP280_ReadCalibration(&hbmp) != BMP280_OK)
-                {
-                    hbmp.state = BMP280_STATE_ERROR;
-                }
-                break;
-            case BMP280_STATE_RECONSTRUCT_CALIBRATION:
-                BMP280_ReconstructCalibration(&hbmp);
-                break;
-            case BMP280_STATE_CTRL_MEAS:
-                if (BMP280_WriteCtrlMeas(&hbmp) != BMP280_OK)
-                {
-                    hbmp.state = BMP280_STATE_ERROR;
-                }
-                break;
-            case BMP280_STATE_MEASURING:
-                if (BMP280_Measuring(&hbmp) != BMP280_OK)
-                {
-                    hbmp.state = BMP280_STATE_ERROR;
-                }
-                break;
-            case BMP280_STATE_READ_MEASURAMENTS:
-                if (BMP280_ReadMeasurements(&hbmp) != BMP280_OK)
-                {
-                    hbmp.state = BMP280_STATE_ERROR;
-                }
-                break;
-            case BMP280_STATE_RECONSTRUCT_MEASURAMENTS:
-                BMP280_ReconstructMeasurements(&hbmp);
-                break;
-            case BMP280_STATE_COMPENSATE:
-                BMP280_CalculateData(&hbmp);
-                break;
-            case BMP280_STATE_READY:
-                printf("Temp: %" PRId32 " degC | Press: %" PRIu32 " hPa\r\n", hbmp.temp_value / 100, hbmp.press_value / 256 / 100);
-                fflush(stdout);
 
-                // SIDH, SIDL, EID8 (zeroed out, don't care), EID0 (zeroed out, don't care), DLC, up to 8 data bytes
+                    printf("Temp: %" PRId32 " degC | Press: %" PRIu32 " hPa\r\n", hbmp.temp_value / 100, hbmp.press_value / 256 / 100);
+                    fflush(stdout);
 
-                // normal path: read BMP280 values, build frames, load TX buffers, RTS, done
+                    // SIDH, SIDL, EID8 (zeroed out, don't care), EID0 (zeroed out, don't care), DLC, up to 8 data bytes
 
-                /* --- settings for both press and temp */
+                    // normal path: read BMP280 values, build frames, load TX buffers, RTS, done
 
-                // DLC: bit 6 RTR - 0, bits 3-0 DLC
-                // 4 bytes = 0100
-                // TXB0DLC - 0 0 00 0100 => 0000 0100 = 0x4 = 2^2
-                uint8_t DLC = 0x4;
-                MCP_RTS_locations_t location = MCP_RTS_TXB0;
+                    /* --- settings for both press and temp */
 
-                /* --- settings for both press and temp */
+                    // DLC: bit 6 RTR - 0, bits 3-0 DLC
+                    // 4 bytes = 0100
+                    // TXB0DLC - 0 0 00 0100 => 0000 0100 = 0x4 = 2^2
+                    uint8_t DLC = 0x4;
+                    MCP_RTS_locations_t location = MCP_RTS_TXB0;
 
-                // 1. Temperature
-                // since the temp is int32_t => it consists of 4 int8_t bytes
+                    /* --- settings for both press and temp */
 
-                int8_t temp_part_31_24 = (int8_t)(hbmp.temp_value >> 24); // 31 30 29 28 27 26 25 24 - 8 bytes
-                int8_t temp_part_23_16 = (int8_t)(hbmp.temp_value >> 16); // 23 22 21 20 19 18 17 16 - 8 bytes
-                int8_t temp_part_15_8 = (int8_t)(hbmp.temp_value >> 8);   // 15 14 13 12 11 10 9 8 - 8 bytes
-                int8_t temp_part_8_0 = (int8_t)(hbmp.temp_value >> 0);    // 15 14 13 12 11 10 9 8 - 8 bytes
+                    // 1. Temperature
+                    // since the temp is int32_t => it consists of 4 int8_t bytes
 
-                // reconstruction of the int32_t => (temp_payload[3] << 24) | (temp_payload[2] << 16) | (temp_payload[1] << 8)  | (temp_payload[0] << 0)
-                uint16_t temp_id = 0x100; // 11 bits; 11-0, 15-12 are unused
-                uint8_t temp_sidh = temp_id >> 3;
-                uint8_t temp_sidl = (temp_id & 0x7) << 5;
+                    int8_t temp_part_31_24 = (int8_t)(hbmp.temp_value >> 24); // 31 30 29 28 27 26 25 24 - 8 bytes
+                    int8_t temp_part_23_16 = (int8_t)(hbmp.temp_value >> 16); // 23 22 21 20 19 18 17 16 - 8 bytes
+                    int8_t temp_part_15_8 = (int8_t)(hbmp.temp_value >> 8);   // 15 14 13 12 11 10 9 8 - 8 bytes
+                    int8_t temp_part_8_0 = (int8_t)(hbmp.temp_value >> 0);    // 15 14 13 12 11 10 9 8 - 8 bytes
 
-                // SIDH, SIDL, EID8 (zeroed out, don't care), EID0 (zeroed out, don't care), DLC, 4 data bytes
+                    // reconstruction of the int32_t => (temp_payload[3] << 24) | (temp_payload[2] << 16) | (temp_payload[1] << 8)  | (temp_payload[0] << 0)
+                    uint16_t temp_id = 0x100; // 11 bits; 11-0, 15-12 are unused
+                    uint8_t temp_sidh = temp_id >> 3;
+                    uint8_t temp_sidl = (temp_id & 0x7) << 5;
 
-                uint8_t temp_payload[9] = {temp_sidh, temp_sidl, 0x00, 0x00, DLC, temp_part_31_24, temp_part_23_16, temp_part_15_8, temp_part_8_0};
+                    // SIDH, SIDL, EID8 (zeroed out, don't care), EID0 (zeroed out, don't care), DLC, 4 data bytes
 
-                mcp2515_load_tx_buffer(MCP_Load_TXB0SIDH, temp_payload, 9);
+                    // the temperature can genuinely be negative
+                    // the implicit int8_t -> uin8_t conversion preserving the bit pattern when the array is initialized
+                    // the conversion in C is well-defined (wraps via modulo, effectively a reinterpret for two's-complement), so the bits going out over CAN will be correct
+                    uint8_t temp_payload[9] = {temp_sidh, temp_sidl, 0x00, 0x00, DLC, temp_part_31_24, temp_part_23_16, temp_part_15_8, temp_part_8_0};
 
-                mcp2515_rts(&location, 1U);
+                    mcp2515_load_tx_buffer(MCP_Load_TXB0SIDH, temp_payload, 9);
 
-                // 2. Pressure
-                // since the pressure is uint32_t => it consists of 4 uint8_t bytes
+                    mcp2515_rts(&location, 1U);
 
-                uint8_t press_part_31_24 = (uint8_t)(hbmp.press_value >> 24); // 31 30 29 28 27 26 25 24 - 8 bytes
-                uint8_t press_part_23_16 = (uint8_t)(hbmp.press_value >> 16); // 23 22 21 20 19 18 17 16 - 8 bytes
-                uint8_t press_part_15_8 = (uint8_t)(hbmp.press_value >> 8);   // 15 14 13 12 11 10 9 8 - 8 bytes
-                uint8_t press_part_8_0 = (uint8_t)(hbmp.press_value >> 0);    // 15 14 13 12 11 10 9 8 - 8 bytes
+                    // 2. Pressure
+                    // since the pressure is uint32_t => it consists of 4 uint8_t bytes
 
-                // reconstruction of the uint32_t => (press_part_31_24 << 24) | (press_part_23_16 << 16) | (press_part_15_8 << 8)  | (press_part_8_0 << 0)
-                uint16_t press_id = 0x101; // 11 bits; 11-0, 15-12 are unused
-                uint8_t press_sidh = press_id >> 3;
-                uint8_t press_sidl = (press_id & 0x7) << 5;
+                    uint8_t press_part_31_24 = (uint8_t)(hbmp.press_value >> 24); // 31 30 29 28 27 26 25 24 - 8 bytes
+                    uint8_t press_part_23_16 = (uint8_t)(hbmp.press_value >> 16); // 23 22 21 20 19 18 17 16 - 8 bytes
+                    uint8_t press_part_15_8 = (uint8_t)(hbmp.press_value >> 8);   // 15 14 13 12 11 10 9 8 - 8 bytes
+                    uint8_t press_part_8_0 = (uint8_t)(hbmp.press_value >> 0);    // 15 14 13 12 11 10 9 8 - 8 bytes
 
-                // SIDH, SIDL, EID8 (zeroed out, don't care), EID0 (zeroed out, don't care), DLC, 4 data bytes
+                    // reconstruction of the uint32_t => (press_part_31_24 << 24) | (press_part_23_16 << 16) | (press_part_15_8 << 8)  | (press_part_8_0 << 0)
+                    uint16_t press_id = 0x101; // 11 bits; 11-0, 15-12 are unused
+                    uint8_t press_sidh = press_id >> 3;
+                    uint8_t press_sidl = (press_id & 0x7) << 5;
 
-                uint8_t press_payload[9] = {press_sidh, press_sidl, 0x00, 0x00, DLC, press_part_31_24, press_part_23_16, press_part_15_8, press_part_8_0};
+                    // SIDH, SIDL, EID8 (zeroed out, don't care), EID0 (zeroed out, don't care), DLC, 4 data bytes
 
-                mcp2515_load_tx_buffer(MCP_Load_TXB0SIDH, press_payload, 9);
+                    uint8_t press_payload[9] = {press_sidh, press_sidl, 0x00, 0x00, DLC, press_part_31_24, press_part_23_16, press_part_15_8, press_part_8_0};
 
-                mcp2515_rts(&location, 1U);
+                    mcp2515_load_tx_buffer(MCP_Load_TXB0SIDH, press_payload, 9);
 
-                // printf("start_pending_hits: %d | sb_hits: %d\r\n", hi2c.start_pending_hits, hi2c.sb_hits);
+                    mcp2515_rts(&location, 1U);
 
-                hbmp.request_status = BMP280_REQUEST_NONE;
-                hbmp.retries = 0;
-                hbmp.measure_start_tick = 0;
-                hbmp.measure_start_tick_status = BMP280_START_TICK_NEVER_CAPTURED;
-                // BMP start measurements
-                hbmp.state = BMP280_STATE_CTRL_MEAS;
+                    // printf("start_pending_hits: %d | sb_hits: %d\r\n", hi2c.start_pending_hits, hi2c.sb_hits);
 
-                break;
-            case BMP280_STATE_ERROR:
-                if (hbmp.retries >= 3)
-                {
-                    // the counter is exhausted
-                    hbmp.state = BMP280_STATE_FAULT;
-                    break;
-                }
-
-                if (hbmp.hi2c->state == I2C_STATE_IDLE)
-                {
-                    hbmp.retries++;
-
-                    // begin a transaction from the beginning (Calibration is read once at the very beginning, so omit the state)
+                    hbmp.request_status = BMP280_REQUEST_NONE;
+                    hbmp.retries = 0;
+                    hbmp.measure_start_tick = 0;
+                    hbmp.measure_start_tick_status = BMP280_START_TICK_NEVER_CAPTURED;
+                    // BMP start measurements
                     hbmp.state = BMP280_STATE_CTRL_MEAS;
                 }
+                else
+                {
+                    printf("The BMP280 state is not READY during the 500ms tick check. Frames sending skipped!");
+                    fflush(stdout);
+                }
+            }
+        }
 
-                break;
-            case BMP280_STATE_FAULT:
-                printf("The BMP280 sensor experienced hard fault!");
-                fflush(stdout);
+        switch (hbmp.state)
+        {
+        case BMP280_STATE_IDLE:
+            break;
+        case BMP280_STATE_INIT:
+            if (BMP280_Init(&hbmp, meas) != BMP280_OK)
+            {
+                hbmp.state = BMP280_STATE_ERROR;
+            }
+            break;
+        case BMP280_STATE_READ_CALIBRATION:
+            if (BMP280_ReadCalibration(&hbmp) != BMP280_OK)
+            {
+                hbmp.state = BMP280_STATE_ERROR;
+            }
+            break;
+        case BMP280_STATE_RECONSTRUCT_CALIBRATION:
+            BMP280_ReconstructCalibration(&hbmp);
+            break;
+        case BMP280_STATE_CTRL_MEAS:
+            if (BMP280_WriteCtrlMeas(&hbmp) != BMP280_OK)
+            {
+                hbmp.state = BMP280_STATE_ERROR;
+            }
+            break;
+        case BMP280_STATE_MEASURING:
+            if (BMP280_Measuring(&hbmp) != BMP280_OK)
+            {
+                hbmp.state = BMP280_STATE_ERROR;
+            }
+            break;
+        case BMP280_STATE_READ_MEASURAMENTS:
+            if (BMP280_ReadMeasurements(&hbmp) != BMP280_OK)
+            {
+                hbmp.state = BMP280_STATE_ERROR;
+            }
+            break;
+        case BMP280_STATE_RECONSTRUCT_MEASURAMENTS:
+            BMP280_ReconstructMeasurements(&hbmp);
+            break;
+        case BMP280_STATE_COMPENSATE:
+            BMP280_CalculateData(&hbmp);
+            break;
+        case BMP280_STATE_READY:
+            break;
+        case BMP280_STATE_ERROR:
+            if (hbmp.retries >= 3)
+            {
+                // the counter is exhausted
+                hbmp.state = BMP280_STATE_FAULT;
                 break;
             }
+
+            if (hbmp.hi2c->state == I2C_STATE_IDLE)
+            {
+                hbmp.retries++;
+
+                // begin a transaction from the beginning (Calibration is read once at the very beginning, so omit the state)
+                hbmp.state = BMP280_STATE_CTRL_MEAS;
+            }
+
+            break;
+        case BMP280_STATE_FAULT:
+            printf("The BMP280 sensor experienced hard fault!");
+            fflush(stdout);
+            break;
         }
     }
 
