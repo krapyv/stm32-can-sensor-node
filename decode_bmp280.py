@@ -40,13 +40,13 @@ def main():
     print(f"Listening on {channel} for IDs 0x{TEMP_ID:X} / 0x{PRESS_ID:X}... (Ctrl+C to stop)")
 
     try:
-        for msg in:
+        for msg in bus:
             if msg.arbitration_id == TEMP_ID and msg.dlc == 4:
                 temp = decode_temp(msg.data)
                 print(f"[TEMP ] raw={msg.data.hex()} {temp:.2f} degC")
             elif msg.arbitration_id == PRESS_ID and msg.dlc == 4:
                 press = decode_press(msg.data)
-                printf(f"[PRESS] raw = {msg.data.hex()} {press:.2f} hPa")
+                print(f"[PRESS] raw = {msg.data.hex()} {press:.2f} hPa")
             # ignore anything else (e.g. stray RX during bring-up} silently
     except KeyboardInterrupt:
         print("\nStopped.")

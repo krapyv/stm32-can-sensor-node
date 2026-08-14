@@ -204,13 +204,13 @@ int main(void)
 
             if (can_intf_stuck)
             {
-                printf("The MCP2515 experiences unhandled error condition!");
+                printf("The MCP2515 experiences unhandled error condition!\r\n");
                 fflush(stdout);
             }
 
             if (can_bus_off)
             {
-                printf("The bus is off!");
+                printf("The bus is off!\r\n");
                 fflush(stdout);
 
                 if (!grace_active)
@@ -227,7 +227,7 @@ int main(void)
                 }
                 else
                 {
-                    printf("The grace window is ongoing!");
+                    printf("The grace window is ongoing!\r\n");
                     fflush(stdout);
 
                     if (SysTick_GetTick() - grace_window_ms >= 10U)
@@ -256,7 +256,8 @@ int main(void)
                     // 4 bytes = 0100
                     // TXB0DLC - 0 0 00 0100 => 0000 0100 = 0x4 = 2^2
                     uint8_t DLC = 0x4;
-                    MCP_RTS_locations_t location = MCP_RTS_TXB0;
+                    MCP_RTS_locations_t location1 = MCP_RTS_TXB0;
+                    MCP_RTS_locations_t location2 = MCP_RTS_TXB1;
 
                     /* --- settings for both press and temp */
 
@@ -282,7 +283,7 @@ int main(void)
 
                     mcp2515_load_tx_buffer(MCP_Load_TXB0SIDH, temp_payload, 9);
 
-                    mcp2515_rts(&location, 1U);
+                    mcp2515_rts(&location1, 1U);
 
                     // 2. Pressure
                     // since the pressure is uint32_t => it consists of 4 uint8_t bytes
@@ -301,9 +302,9 @@ int main(void)
 
                     uint8_t press_payload[9] = {press_sidh, press_sidl, 0x00, 0x00, DLC, press_part_31_24, press_part_23_16, press_part_15_8, press_part_8_0};
 
-                    mcp2515_load_tx_buffer(MCP_Load_TXB0SIDH, press_payload, 9);
+                    mcp2515_load_tx_buffer(MCP_Load_TXB1SIDH, press_payload, 9);
 
-                    mcp2515_rts(&location, 1U);
+                    mcp2515_rts(&location2, 1U);
 
                     // printf("start_pending_hits: %d | sb_hits: %d\r\n", hi2c.start_pending_hits, hi2c.sb_hits);
 
