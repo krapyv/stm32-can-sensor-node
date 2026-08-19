@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <inttypes.h>
-#include "mcp2515.h"
-#include "systick.h"
-#include "led.h"
-#include "bmp280.h"
-#include "uart.h"
+#include "mcp2515/mcp2515.h"
+#include "systick/systick.h"
+#include "led/led.h"
+#include "bmp280/bmp280.h"
+#include "uart/uart.h"
 
 volatile uint8_t can_int_flag = 0;
 volatile uint8_t can_bus_off = 0;

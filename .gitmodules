@@ -1,0 +1,15 @@
+[submodule "mcp2515"]
+	path = mcp2515
+	url = git@github.com:krapyv/stm32-mcp2515-driver.git
+[submodule "systick"]
+	path = systick
+	url = git@github.com:krapyv/stm32-systick-driver.git
+[submodule "led"]
+	path = led
+	url = git@github.com:krapyv/stm32-led-driver.git
+[submodule "bmp280"]
+	path = bmp280
+	url = git@github.com:krapyv/stm32-bmp280-driver.git
+[submodule "uart"]
+	path = uart
+	url = git@github.com:krapyv/stm32-uart-driver.git
