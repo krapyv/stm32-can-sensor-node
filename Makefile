@@ -3,17 +3,15 @@ PREFIX = arm-none-eabi-
 CC = $(PREFIX)gcc
 OBJCOPY = $(PREFIX)objcopy
 
-# --- Centralized Driver Path ---
-SHARED_CORE_DIR = /mnt/hdd/embedded-journey/my_reusable_drivers
-
-INCLUDES = -I. -I${SHARED_CORE_DIR}/core -I${SHARED_CORE_DIR}/periph -I${SHARED_CORE_DIR}/utils -I${SHARED_CORE_DIR}/devices/mcp2515 -I${SHARED_CORE_DIR}/devices/bmp280 -I${SHARED_CORE_DIR}/devices/led
+INCLUDES = -I.
 
 # Compiler flags (same for all STM32F411 projects)
 CFLAGS = -mcpu=cortex-m4 -mthumb -nostartfiles -g3 -O0 --specs=nano.specs --specs=nosys.specs -lc -DUSE_APP_CONFIG
 LDFLAGS = -T stm32f411.ld
 
-# Project files (CHANGE THIS FOR EACH PROJECT)
-SRC = startup_stm32f411ceux.s ${SHARED_CORE_DIR}/periph/i2c.c ${SHARED_CORE_DIR}/periph/spi.c ${SHARED_CORE_DIR}/periph/uart.c ${SHARED_CORE_DIR}/periph/systick.c ${SHARED_CORE_DIR}/devices/mcp2515/mcp2515.c ${SHARED_CORE_DIR}/devices/bmp280/bmp280.c ${SHARED_CORE_DIR}/devices/led/led.c main.c
+# Project files - exactly ONE .c per unique driver, despite nested submodule duplication
+SRC = startup_stm32f411ceux.s main.c systick/systick.c led/led.c uart/uart.c uart/ring_buffer/ring_buffer.c bmp280/bmp280.c bmp280.c/i2c/i2c.c mcp2515/mcp2515.c mcp2515/spi/spi.c
+
 ELF = program.elf
 BIN = program.bin
 
