@@ -1,4 +1,4 @@
-#/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Decoder for the Week 21 BMP280 CAN sensor node.
 
@@ -36,7 +36,7 @@ def decode_press(data:bytes) -> float:
 def main():
     channel = sys.argv[1] if len(sys.argv) > 1 else "can0"
 
-    bus = can.interface.Bus(channel=channel, bustype="socketcan")
+    bus = can.interface.Bus(channel=channel, interface="socketcan")
     print(f"Listening on {channel} for IDs 0x{TEMP_ID:X} / 0x{PRESS_ID:X}... (Ctrl+C to stop)")
 
     try:

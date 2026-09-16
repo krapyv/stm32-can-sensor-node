@@ -1,1 +1,4 @@
 *.swp
+*.bin
+*.elf
+.vscode/*

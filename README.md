@@ -71,28 +71,29 @@ Level shifter placed directly behind Black Pill to keep A-side hop short per cap
 
 TXS0108E side A faces 3.3V power rail, side B - 5V power rail.
 
-MCP2515 VCC is connected to the 5V power rail.
-MCP2515 GND is connected to the common ground rail (GND).
-MCP2515 SCK is connected to the TXS0108E B1 pin.
-MCP2515 SI (MOSI) is connected to the TXS0108E B2 pin.
+MCP2515 VCC is connected to the 5V power rail (red wire).
+MCP2515 GND is connected to the common ground rail (GND) (black wire).
+MCP2515 SCK is connected to the TXS0108E B1 pin (yellow wire).
+MCP2515 SI (MOSI) is connected to the TXS0108E B2 pin (green wire).
 
 MCP2515 SO (MISO) is connected directly to STM32 PA6, bypassing the level shifter. STM32 input pins are 5V-tolerant on this line, and MISO is driven by the MCP2515 - the 3.3V STM32 receiver correctly interprets the 5V logic high.
+The wire color - blue.
 
-MCP2515 CS is connected to the TXS0108E B3 pin.
-MCP2515 INT is connected to the TXS0108E B4 pin.
+MCP2515 CS is connected to the TXS0108E B3 pin (white wire).
+MCP2515 INT is connected to the TXS0108E B4 pin (gray wire).
 
-STM32 PA5 (SCK) is connected to the TXS0108E A1.
-STM32 PA7 (MOSI) is connected to the TXS0108E A2.
-STM32 PA4 (CS) is connected to the TXS0108E A3.
-STM32 PB15 (INT) is connected to the TXS0108E A4.
+STM32 PA5 (SCK) is connected to the TXS0108E A1 (yellow wire).
+STM32 PA7 (MOSI) is connected to the TXS0108E A2 (green wire).
+STM32 PA4 (CS) is connected to the TXS0108E A3 (white wire).
+STM32 PB15 (INT) is connected to the TXS0108E A4 (gray wire).
 
-TXS0108E VA (3.3V side) connected to the 3.3V power rail.
-TXS0108E VB (5V side) connected to the 5V power rail.
-TXS0108E GND is connected to the common ground rail (GND).
-TXS0108E OE pin is connected to 3.3V power rail.
+TXS0108E VA (3.3V side) connected to the 3.3V power rail (red wire).
+TXS0108E VB (5V side) connected to the 5V power rail (red wire).
+TXS0108E GND is connected to the common ground rail (GND) (black wire).
+TXS0108E OE pin is connected to 3.3V power rail (orange wire).
 
-The CANable GND is connected to the common ground rail (GND).
-The CANable CAN_H and CAN_L are connected to the MCP2515 CAN_H and CAN_L respectively.
+The CANable GND is connected to the common ground rail (GND) (black wire).
+The CANable CAN_H and CAN_L are connected to the MCP2515 CAN_H and CAN_L respectively. The CAN_H wire is yellow, the CAN_L wire is green.
 
 The Normal mode transition error led:
 The 220 Ohms resistor terminal 1 is connected to the PA0 of the STM32.
@@ -145,6 +146,12 @@ candump can0
 
 # Option B - to use a written Python/python-can decoder to print the frames in human-readable way
 python3 decode_bmp280.py can0
+
+# or
+
+# grant the file "executable" permissions
+chmod +x decode_bmp280.py
+./decode_bmp280.py can0
 ```
 
 In new terminal window or tab:
